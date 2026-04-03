@@ -13,8 +13,6 @@ Python이 담당하는 부분:
     - 계산 결과를 pipeline_data에 저장
 """
 from typing import Dict, Any
-import anthropic
-
 from .base import BaseAgent
 from core import metrics as metrics_module
 

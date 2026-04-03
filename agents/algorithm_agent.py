@@ -14,7 +14,6 @@ Python이 담당하는 부분:
 """
 from typing import Dict, Any
 import numpy as np
-import anthropic
 
 from .base import BaseAgent
 from core.touch_algorithm import TouchDetector, FILTER_ALGORITHMS

@@ -14,7 +14,6 @@ Python이 담당하는 부분:
 """
 from typing import Dict, Any
 import numpy as np
-import anthropic
 
 from .base import BaseAgent
 from core.frame_simulator import TouchFrameSimulator
@@ -39,8 +38,8 @@ generate_scenario 도구로 모든 시나리오를 순서대로 생성하세요.
 
 class DataAgent(BaseAgent):
 
-    def __init__(self, client: anthropic.Anthropic, pipeline_data: Dict[str, Any]):
-        super().__init__(client, pipeline_data)
+    def __init__(self, client, pipeline_data: Dict[str, Any], **kwargs):
+        super().__init__(client, pipeline_data, **kwargs)
         self.simulator = TouchFrameSimulator()
 
     # ── Tool 구현 메서드 ────────────────────────────────────────────────────

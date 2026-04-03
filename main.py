@@ -27,9 +27,9 @@ Architecture:
     python main.py
 """
 
+import os
 import sys
 import argparse
-import anthropic
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -37,6 +37,35 @@ from agents.data_agent import DataAgent
 from agents.algorithm_agent import AlgorithmAgent
 from agents.metrics_agent import MetricsAgent
 from agents.report_agent import ReportAgent
+
+
+def _build_client(backend: str):
+    """
+    백엔드에 맞는 LLM 클라이언트 생성
+
+    anthropic  → ANTHROPIC_API_KEY 사용
+    openai     → OPENAI_BASE_URL / OPENAI_API_KEY 사용
+    """
+    if backend == "openai":
+        try:
+            from openai import OpenAI
+        except ImportError:
+            print("Error: openai 패키지가 필요합니다: pip install openai")
+            sys.exit(1)
+
+        base_url = os.environ.get("OPENAI_BASE_URL")
+        api_key  = os.environ.get("OPENAI_API_KEY", "none")  # Ollama 등은 키 불필요
+        if not base_url:
+            print("Error: .env 에 OPENAI_BASE_URL을 설정해주세요")
+            sys.exit(1)
+        return OpenAI(base_url=base_url, api_key=api_key)
+
+    else:  # anthropic
+        import anthropic as _anthropic
+        if not os.environ.get("ANTHROPIC_API_KEY"):
+            print("Error: .env 에 ANTHROPIC_API_KEY를 설정해주세요")
+            sys.exit(1)
+        return _anthropic.Anthropic()
 
 
 def run_pipeline(filter_type: str = None) -> tuple:
@@ -56,14 +85,11 @@ def run_pipeline(filter_type: str = None) -> tuple:
         3. MetricsAgent    → 지표 계산 (AlgorithmAgent 결과 필요)
         4. ReportAgent     → 리포트 생성 (모든 결과 필요)
     """
-    # ── 환경 확인 ─────────────────────────────────────────────────────────
-    import os
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        print("Error: ANTHROPIC_API_KEY 환경변수를 설정해주세요")
-        print("  export ANTHROPIC_API_KEY='your-api-key'")
-        sys.exit(1)
-
-    client = anthropic.Anthropic()
+    # ── 백엔드 및 모델 결정 (.env 기준) ───────────────────────────────────
+    backend = os.environ.get("LLM_BACKEND", "anthropic").lower()
+    model   = os.environ.get("OPENAI_MODEL") if backend == "openai" else None
+    client  = _build_client(backend)
+    agent_kwargs = {"backend": backend, "model": model}
 
     # ── 에이전트 간 공유 데이터 저장소 ─────────────────────────────────────
     # 각 에이전트가 이 딕셔너리에 결과를 쓰고, 다음 에이전트가 읽어 사용합니다.
@@ -75,11 +101,13 @@ def run_pipeline(filter_type: str = None) -> tuple:
         "filter_type": filter_type or "gaussian",  # AlgorithmAgent가 확정
     }
 
-    filter_label = f"[필터: {filter_type.upper()}]" if filter_type else "[필터: 자율 선택]"
+    filter_label   = f"[필터: {filter_type.upper()}]" if filter_type else "[필터: 자율 선택]"
+    backend_label  = f"{backend.upper()}  model={model or 'default'}"
 
     print()
     print("=" * 62)
     print(f"   Touch IC Algorithm Evaluation  {filter_label}")
+    print(f"   Backend: {backend_label}")
     print("=" * 62)
 
     # ── Agent 1: 테스트 데이터 생성 ────────────────────────────────────────
@@ -87,7 +115,7 @@ def run_pipeline(filter_type: str = None) -> tuple:
     print("┌─ [Agent 1] Data Agent")
     print("│  역할: 테스트 시나리오 생성 (프레임 시뮬레이션)")
     print("│  ...")
-    data_agent = DataAgent(client, pipeline_data)
+    data_agent = DataAgent(client, pipeline_data, **agent_kwargs)
     data_agent.run()
     print("└─ 완료")
 
@@ -99,9 +127,9 @@ def run_pipeline(filter_type: str = None) -> tuple:
     if filter_type:
         print(f"│  필터: {filter_type} (사전 지정)")
     else:
-        print("│  필터: Claude가 시나리오를 보고 자율 선택")
+        print("│  필터: LLM이 시나리오를 보고 자율 선택")
     print("│  ...")
-    algo_agent = AlgorithmAgent(client, pipeline_data)
+    algo_agent = AlgorithmAgent(client, pipeline_data, **agent_kwargs)
     algo_agent.run(filter_type=filter_type)
     print(f"│  확정된 필터: {pipeline_data.get('filter_type', '?').upper()}")
     print("└─ 완료")
@@ -112,7 +140,7 @@ def run_pipeline(filter_type: str = None) -> tuple:
     print("│  역할: 성능 지표 계산 및 해석 (accuracy, jitter, SNR, F1)")
     print("│  입력: pipeline_data['detections'] (AlgorithmAgent 결과)")
     print("│  ...")
-    metrics_agent = MetricsAgent(client, pipeline_data)
+    metrics_agent = MetricsAgent(client, pipeline_data, **agent_kwargs)
     metrics_output = metrics_agent.run()
     print("└─ 완료")
 
@@ -130,7 +158,7 @@ def run_pipeline(filter_type: str = None) -> tuple:
     print("│  역할: 종합 평가 리포트 작성 (강점/약점/개선 권고)")
     print("│  입력: pipeline_data 전체 (모든 에이전트 결과)")
     print("│  ...")
-    report_agent = ReportAgent(client, pipeline_data)
+    report_agent = ReportAgent(client, pipeline_data, **agent_kwargs)
     report = report_agent.run()
     print("└─ 완료")
 

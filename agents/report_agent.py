@@ -13,7 +13,6 @@ Python이 담당하는 부분:
     - 저장된 모든 데이터 취합 및 전달
 """
 from typing import Dict, Any
-import anthropic
 
 from .base import BaseAgent
 
